@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/netafado/security-audit-skill/main/schemas/findings.schema.json",
+  "title": "SecurityAuditFindings",
+  "description": "Findings document produced by a security-audit run. Conformance is enforced by scripts/validate_findings.py.",
+  "type": "object",
+  "required": ["audit_id", "generated_at", "findings"],
+  "additionalProperties": false,
+  "properties": {
+    "audit_id": {
+      "type": "string",
+      "description": "Identifier of the audit run this document belongs to."
+    },
+    "repo": {
+      "type": "string",
+      "description": "Repository the audit was performed on (path or URL)."
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO-8601 UTC timestamp of generation."
+    },
+    "models": {
+      "type": "object",
+      "description": "Optional record of which model performed which role (discovery, validation). Model-agnostic: names are informational only.",
+      "additionalProperties": { "type": "string" }
+    },
+    "coverage": {
+      "type": "array",
+      "description": "Audit coverage by repository area and attack class.",
+      "items": {
+        "type": "object",
+        "required": ["area", "attack_class", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "area": { "type": "string" },
+          "attack_class": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+          "status": { "enum": ["uncovered", "investigated", "no-issues", "findings"] },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "title": "Finding",
+      "required": [
+        "id", "title", "description", "attack_class", "files",
+        "attacker_capabilities", "trust_boundary", "exploit_path", "impact",
+        "severity", "confidence", "status", "reproduction", "validation"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^SA-[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$",
+          "description": "Stable identifier: SA-<attack-class>-<8 hex of sha1(attack_class|primary file|normalized title)>. Same vulnerability re-discovered independently recomputes to the same id, enabling dedup."
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "description": "What is wrong and why it is exploitable. Distinguish source-code evidence from deployment assumptions."
+        },
+        "attack_class": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+          "description": "e.g. injection, auth-bypass, xss, csrf, ssrf, deserialization, race-conditions, memory-corruption, protocol-parsing, crypto, info-exposure, business-logic, dependency-config — or a repo-specific class."
+        },
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["path"],
+            "additionalProperties": false,
+            "properties": {
+              "path": { "type": "string", "description": "Repo-relative path." },
+              "lines": {
+                "type": "array",
+                "items": { "type": "integer", "minimum": 1 },
+                "description": "Relevant line numbers, verified by scripts/verify_references.py."
+              },
+              "function": { "type": "string", "description": "Symbol expected to appear in this file." },
+              "evidence": { "type": "string", "description": "Quoted code from the original source." }
+            }
+          }
+        },
+        "functions": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "All functions involved in the vulnerable path."
+        },
+        "attacker_capabilities": {
+          "type": "string",
+          "description": "Which attacker profile (from the threat model) can do what to reach this."
+        },
+        "trust_boundary": {
+          "type": "string",
+          "description": "The boundary violated, e.g. 'network -> application', 'tenant -> tenant'."
+        },
+        "exploit_path": {
+          "type": "string",
+          "description": "Concrete steps from attacker action to impact."
+        },
+        "impact": { "type": "string" },
+        "severity": { "enum": ["critical", "high", "medium", "low", "info"] },
+        "confidence": { "enum": ["high", "medium", "low"] },
+        "status": {
+          "enum": ["hypothesis", "confirmed", "refuted", "unverified"],
+          "description": "confirmed requires poc_ref and reproducible evidence. unverified requires missing prerequisites in reproduction/notes."
+        },
+        "reproduction": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string" },
+          "description": "Exact steps or commands to reproduce; numbered strings."
+        },
+        "poc_ref": {
+          "type": "string",
+          "description": "Path under .security-audit/pocs/ holding commands and raw (redacted) output. Required when status is confirmed."
+        },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "References to captured evidence (file paths, quoted output)."
+        },
+        "validation": {
+          "type": "object",
+          "required": ["status"],
+          "additionalProperties": false,
+          "properties": {
+            "status": { "enum": ["pending", "validated", "refuted", "duplicate"] },
+            "validator": { "type": "string", "description": "Which independent model/context validated." },
+            "checked_at": { "type": "string" },
+            "notes": { "type": "string" }
+          }
+        },
+        "patch_ref": {
+          "type": "string",
+          "description": "Path under .security-audit/patches/ to the proposed diff + regression test. Set only after human approval flow."
+        },
+        "production_reachable": {
+          "type": "boolean",
+          "description": "True only if repo evidence (not assumption) shows the path ships to production."
+        },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      }
+    }
+  }
+}

