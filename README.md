@@ -6,6 +6,10 @@ components, vulnerability discovery is separated from independent validation, an
 reproducible evidence promotes a hypothesis to a confirmed finding. The goal is real,
 exploitable vulnerabilities — not generic code-review suggestions.
 
+> 📖 **Read the write-up:** [Building a Model-Agnostic Security Audit Skill for AI Coding
+> Agents](https://www.isaiasfsantos.com.br/blog/building-a-security-audit-skill) — how the
+> methodology works, the design decisions behind it, and what to expect from an audit.
+
 ## What an audit produces
 
 In `<repo>/.security-audit/`:
